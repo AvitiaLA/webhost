@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright, TimeoutError
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 LOGIN_URL = "https://betadash.lunes.host/login"
-SUCCESS_URL = "https://betadash.lunes.host"
+SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功后跳转的页面
 
 def login():
     if not EMAIL or not PASSWORD:
@@ -21,20 +21,13 @@ def login():
             page.goto(LOGIN_URL, timeout=60000)
             print("页面加载完成")
 
-            # 等待 iframe 出现（先等待 iframe 元素）
-            print("等待 Cloudflare 验证 iframe 出现...")
-            iframe_element = page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=30000)
-            print("iframe 元素出现，获取 frame 对象...")
-            frame = iframe_element.content_frame()
-            if not frame:
-                raise Exception("iframe的内容frame没有加载出来")
-
-            print("等待复选框出现...")
-            checkbox = frame.wait_for_selector("role=checkbox", timeout=20000)
-            print("复选框出现，点击复选框...")
+            # 直接等待页面上的 Cloudflare 验证复选框出现并点击
+            print("等待 Cloudflare 验证复选框出现...")
+            checkbox = page.locator("role=checkbox")
+            checkbox.wait_for(timeout=15000)
             checkbox.click()
-            print("复选框已点击，等待验证完成...")
-            time.sleep(7)
+            print("Cloudflare 验证复选框已点击")
+            time.sleep(5)  # 等待验证过程结束
 
             # 填写登录信息
             page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
@@ -44,6 +37,7 @@ def login():
             with page.expect_navigation(timeout=15000):
                 page.get_by_role("button", name="Submit").click()
 
+            # 判断是否跳转成功
             current_url = page.url
             if current_url.strip("/") == SUCCESS_URL.strip("/"):
                 print("✅ 登录成功")
