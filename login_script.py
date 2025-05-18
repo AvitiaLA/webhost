@@ -1,3 +1,4 @@
+!pip install selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -77,7 +78,6 @@ if __name__ == "__main__":
     if login_statuses:
         message = "WEBHOST登录状态:\n\n" + "\n".join(login_statuses)
         result = send_telegram_message(message)
-
         print("消息已发送到Telegram:", result)
     else:
         print("没有登录状态信息")
