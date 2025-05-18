@@ -1,10 +1,11 @@
 import os
+import time
 from playwright.sync_api import sync_playwright, TimeoutError
 
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 LOGIN_URL = "https://betadash.lunes.host/login"
-SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功后跳转页面
+SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功后跳转的页面
 
 def login():
     if not EMAIL or not PASSWORD:
@@ -12,7 +13,7 @@ def login():
         return
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # 无头模式
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
             locale="en-US",
@@ -25,27 +26,28 @@ def login():
             page.goto(LOGIN_URL, timeout=60000)
 
             print("等待 Turnstile 自动验证完成...")
-            page.wait_for_selector("div.g-recaptcha", timeout=20000)
-            page.wait_for_timeout(7000)  # 给7秒自动验证时间
+            time.sleep(8)
 
             print("填写邮箱和密码...")
-            page.fill("#email", EMAIL)
-            page.fill("#password", PASSWORD)
+            page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
+            page.get_by_placeholder("Your Password Here").fill(PASSWORD)
 
             print("提交表单...")
-            with page.expect_navigation(timeout=20000):
-                page.click("button[type=submit]")
+            page.get_by_role("button", name="Submit").click()
 
-            current_url = page.url.rstrip("/")
-            if current_url == SUCCESS_URL.rstrip("/"):
+            print("等待页面跳转...")
+            time.sleep(6)  # 等待登录处理完成
+
+            current_url = page.url
+            if current_url.strip("/") == SUCCESS_URL.strip("/"):
                 print("✅ 登录成功")
             else:
                 print(f"❌ 登录失败，当前页面地址：{current_url}")
 
-        except TimeoutError as e:
-            print(f"❌ 超时错误: {e}")
+        except TimeoutError as te:
+            print(f"❌ 超时错误: {te}")
         except Exception as e:
-            print(f"登录过程异常: {e}")
+            print(f"登录过程中出现错误: {e}")
         finally:
             context.close()
             browser.close()
