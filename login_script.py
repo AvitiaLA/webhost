@@ -1,6 +1,7 @@
 from playwright.sync_api import sync_playwright, TimeoutError
 import os
 import requests
+import time
 
 def send_telegram_message(message):
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -16,11 +17,11 @@ def send_telegram_message(message):
 
 def login_koyeb(email, password):
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
+        browser = p.firefox.launch(headless=False)
         page = browser.new_page()
 
         # 访问登录页面
-        page.goto("https://betadash.lunes.host/login", timeout=60000)  # 增加超时时间为60秒
+        page.goto("https://betadash.lunes.host/login", timeout=60000)
 
         # 输入邮箱和密码
         page.get_by_placeholder("myemail@gmail.com").click()
@@ -31,14 +32,17 @@ def login_koyeb(email, password):
         # 定位 Cloudflare 验证方框的复选框元素
         checkbox = page.get_by_role("checkbox", name="Verify you are human")
 
-        # 点击该复选框元素,最多重试3次
-        for _ in range(3):
-            try:
-                checkbox.click()
-                break  # 如果点击成功,退出循环
-            except TimeoutError:
-                print("点击复选框超时,重试中...")
-                continue
+        # 点击该复选框元素,最多重试 5 次,每次重试间隔 2 秒
+        for _ in range(5):
+            if checkbox.is_visible() and checkbox.is_enabled():
+                try:
+                    checkbox.click()
+                    break  # 如果点击成功,退出循环
+                except TimeoutError:
+                    print("点击复选框超时,重试中...")
+            else:
+                print("复选框元素未就绪,等待 2 秒后重试...")
+            time.sleep(2)
         else:
             return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
 
@@ -77,6 +81,4 @@ if __name__ == "__main__":
         result = send_telegram_message(message)
         print("消息已发送到Telegram:", result)
     else:
-        error_message = "没有配置任何账号"
-        send_telegram_message(error_message)
-        print(error_message)
+        error_message
