@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright, TimeoutError
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 LOGIN_URL = "https://betadash.lunes.host/login"
-SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功后跳转的页面
+SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功跳转地址
 
 def login():
     if not EMAIL or not PASSWORD:
@@ -18,36 +18,33 @@ def login():
         page = context.new_page()
 
         try:
+            print("访问登录页面...")
             page.goto(LOGIN_URL, timeout=60000)
-            print("页面加载完成")
 
-            # 直接等待页面上的 Cloudflare 验证复选框出现并点击
-            print("等待 Cloudflare 验证复选框出现...")
-            checkbox = page.locator("role=checkbox")
-            checkbox.wait_for(timeout=15000)
-            checkbox.click()
-            print("Cloudflare 验证复选框已点击")
-            time.sleep(5)  # 等待验证过程结束
+            print("等待 Turnstile 验证组件加载...")
+            # 等待 Turnstile 验证 div 里出现 iframe (Turnstile 通常会注入 iframe)
+            page.wait_for_selector("div.g-recaptcha iframe", timeout=20000)
+            print("Turnstile 验证组件加载完成")
 
-            # 填写登录信息
-            page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
-            page.get_by_placeholder("Your Password Here").fill(PASSWORD)
+            # 填写账号密码
+            page.fill("#email", EMAIL)
+            page.fill("#password", PASSWORD)
 
-            # 提交登录
-            with page.expect_navigation(timeout=15000):
-                page.get_by_role("button", name="Submit").click()
+            print("提交登录表单...")
+            with page.expect_navigation(timeout=20000):
+                page.click("button[type=submit]")
 
-            # 判断是否跳转成功
-            current_url = page.url
-            if current_url.strip("/") == SUCCESS_URL.strip("/"):
+            # 登录后判断页面地址
+            current_url = page.url.rstrip("/")
+            if current_url == SUCCESS_URL.rstrip("/"):
                 print("✅ 登录成功")
             else:
-                print(f"❌ 登录失败: 未跳转到仪表板页面 ({current_url})")
+                print(f"❌ 登录失败，当前页面地址：{current_url}")
 
         except TimeoutError as e:
             print(f"❌ 超时错误: {e}")
         except Exception as e:
-            print(f"登录过程中出现错误: {e}")
+            print(f"登录过程异常: {e}")
         finally:
             context.close()
             browser.close()
