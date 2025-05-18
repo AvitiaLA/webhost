@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright, TimeoutError
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 LOGIN_URL = "https://betadash.lunes.host/login"
-SUCCESS_URL = "https://betadash.lunes.host"  # 登录成功后跳转的页面
+SUCCESS_URL = "https://betadash.lunes.host"
 
 def login():
     if not EMAIL or not PASSWORD:
@@ -21,16 +21,20 @@ def login():
             page.goto(LOGIN_URL, timeout=60000)
             print("页面加载完成")
 
-            # 等待iframe出现
+            # 等待 iframe 出现（先等待 iframe 元素）
             print("等待 Cloudflare 验证 iframe 出现...")
-            iframe_locator = page.frame_locator("iframe[src*='challenges.cloudflare.com']")
-            iframe_locator.locator("role=checkbox").wait_for(timeout=20000)
-            print("验证复选框出现，准备点击...")
+            iframe_element = page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=30000)
+            print("iframe 元素出现，获取 frame 对象...")
+            frame = iframe_element.content_frame()
+            if not frame:
+                raise Exception("iframe的内容frame没有加载出来")
 
-            # 点击复选框
-            iframe_locator.locator("role=checkbox").click()
+            print("等待复选框出现...")
+            checkbox = frame.wait_for_selector("role=checkbox", timeout=20000)
+            print("复选框出现，点击复选框...")
+            checkbox.click()
             print("复选框已点击，等待验证完成...")
-            time.sleep(7)  # 等待Cloudflare完成验证
+            time.sleep(7)
 
             # 填写登录信息
             page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
