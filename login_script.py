@@ -20,7 +20,7 @@ def login_koyeb(email, password):
         page = browser.new_page()
 
         # 访问登录页面
-        page.goto("https://betadash.lunes.host/login")
+        page.goto("https://betadash.lunes.host/login", timeout=60000)  # 增加超时时间为60秒
 
         # 输入邮箱和密码
         page.get_by_placeholder("myemail@gmail.com").click()
@@ -31,9 +31,16 @@ def login_koyeb(email, password):
         # 定位 Cloudflare 验证方框的复选框元素
         checkbox = page.get_by_role("checkbox", name="Verify you are human")
 
-        # 点击该复选框元素
+        # 点击该复选框元素,最多重试3次
+for _ in range(3):
+    try:
         checkbox.click()
-
+        break  # 如果点击成功,退出循环
+    except playwright._impl._errors.TimeoutError:
+        print("点击复选框超时,重试中...")
+        continue
+else:
+    return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
         
         # 点击登录按钮
         page.get_by_role("button", name="Submit").click()
