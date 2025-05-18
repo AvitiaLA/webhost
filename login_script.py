@@ -1,67 +1,78 @@
-from playwright.sync_api import sync_playwright, TimeoutError
+import time
 import os
-import requests
+import telegram
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import undetected_chromedriver as uc
+
+EMAIL = os.getenv("LOGIN_EMAIL", "your-email@example.com")
+PASSWORD = os.getenv("LOGIN_PASSWORD", "your-password")
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 
 def send_telegram_message(message):
-    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    if not bot_token or not chat_id:
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("未设置 Telegram 配置")
         return {"ok": False, "description": "Missing token or chat_id"}
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    response = requests.post(url, json=payload)
-    return response.json()
+    try:
+        bot = telegram.Bot(token=TELEGRAM_TOKEN)
+        return bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except Exception as e:
+        return {"ok": False, "description": str(e)}
 
-def login_koyeb(email, password):
-    with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
-        page = browser.new_page()
 
-        page.goto("https://betadash.lunes.host/login", timeout=60000)
+def login():
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-        page.fill("input#email", email)
-        page.fill("input#password", password)
+    try:
+        driver = uc.Chrome(options=options)
+        driver.get("https://lunes.host/login")
 
-        try:
-            frame_element = page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=15000)
-            frame = frame_element.content_frame()
-            checkbox = frame.wait_for_selector("input[type='checkbox']", timeout=15000)
-            checkbox.click()
-        except TimeoutError:
-            browser.close()
-            return f"账号 {email} 登录失败: 验证复选框点击失败"
+        # 填写邮箱和密码
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "email"))).send_keys(EMAIL)
+        driver.find_element(By.ID, "password").send_keys(PASSWORD)
 
-        page.click("button[type=submit]")
+        # 等待复选框 iframe 加载
+        WebDriverWait(driver, 15).until(
+            EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']"))
+        )
 
-        try:
-            page.wait_for_url("https://betadash.lunes.host", timeout=15000)
-        except TimeoutError:
-            browser.close()
-            return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
+        # 点击复选框
+        checkbox = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='checkbox']"))
+        )
+        checkbox.click()
 
-        browser.close()
-        return f"账号 {email} 登录成功!"
+        # 返回主页面继续提交
+        driver.switch_to.default_content()
+
+        # 点击提交按钮
+        submit = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']"))
+        )
+        submit.click()
+
+        # 检查是否成功跳转到仪表板
+        WebDriverWait(driver, 15).until(
+            EC.url_contains("/dashboard")
+        )
+        print("✅ 登录成功！")
+        send_telegram_message("✅ 登录成功！")
+        driver.quit()
+        return True
+    except Exception as e:
+        print("账号  登录失败:", str(e))
+        send_telegram_message(f"账号  登录失败: {e}")
+        driver.quit()
+        return False
+
 
 if __name__ == "__main__":
-    accounts = os.environ.get('WEBHOST', '').split()
-    login_statuses = []
-
-    for account in accounts:
-        email, password = account.split(':')
-        status = login_koyeb(email, password)
-        login_statuses.append(status)
-        print(status)
-
-    if login_statuses:
-        message = "WEBHOST登录状态:\n\n" + "\n".join(login_statuses)
-        result = send_telegram_message(message)
-        print("消息已发送到Telegram:", result)
-    else:
-        error_message = "没有配置任何账号"
-        send_telegram_message(error_message)
-        print(error_message)
+    login()
