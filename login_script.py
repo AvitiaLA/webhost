@@ -1,4 +1,5 @@
-!pip install selenium
+import subprocess
+import sys
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -6,6 +7,11 @@ from selenium.webdriver.support import expected_conditions as EC
 import os
 import requests
 import time
+
+try:
+    import selenium
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "selenium"])
 
 def send_telegram_message(message):
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -66,6 +72,11 @@ def login_koyeb(email, password):
         driver.quit()
 
 if __name__ == "__main__":
+    try:
+        import selenium
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "selenium"])
+
     accounts = os.environ.get('WEBHOST', '').split()
     login_statuses = []
 
