@@ -1,37 +1,54 @@
-name: Run Login Script
+import os
+from playwright.sync_api import sync_playwright, TimeoutError
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 0 1 * *"  # 每月1号运行
+def login():
+    email = os.getenv("LOGIN_EMAIL")
+    password = os.getenv("LOGIN_PASSWORD")
+    if not email or not password:
+        print("请设置环境变量 LOGIN_EMAIL 和 LOGIN_PASSWORD")
+        return False
 
-jobs:
-  login:
-    runs-on: ubuntu-latest
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        page = context.new_page()
 
-    steps:
-      - name: Checkout 代码
-        uses: actions/checkout@v2
+        page.goto("https://betadash.lunes.host/login")
 
-      - name: 设置 Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.10'
+        page.fill("#email", email)
+        page.fill("#password", password)
 
-      - name: 安装依赖
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright requests aiofiles
+        try:
+            frame_element = page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=15000)
+        except TimeoutError:
+            print("验证iframe未出现，可能不需要验证")
+            browser.close()
+            return False
 
-      - name: 安装 Playwright 浏览器
-        run: |
-          playwright install
+        frame = frame_element.content_frame()
+        if not frame:
+            print("获取iframe失败")
+            browser.close()
+            return False
 
-      - name: 运行登录脚本
-        env:
-          LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
-          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python login_script.py
+        try:
+            checkbox = frame.wait_for_selector("div.cf-turnstile-checkbox", timeout=10000)
+            checkbox.click()
+            print("复选框点击完成，等待验证结果...")
+        except TimeoutError:
+            print("验证复选框未找到或点击失败")
+            browser.close()
+            return False
+
+        try:
+            page.wait_for_url("https://betadash.lunes.host/dashboard", timeout=20000)
+            print("登录成功！")
+            return True
+        except TimeoutError:
+            print("未跳转到仪表盘页面，登录失败")
+            return False
+        finally:
+            browser.close()
+
+if __name__ == "__main__":
+    login()
