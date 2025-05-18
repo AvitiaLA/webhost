@@ -29,11 +29,11 @@ def login_koyeb(email, password):
         page.get_by_placeholder("Your Password Here").click()
         page.get_by_placeholder("Your Password Here").fill(password)
 
-        # 定位 Cloudflare 验证方框的复选框元素
-        checkbox = page.get_by_role("checkbox", name="Verify you are human")
+        # 定位 Cloudflare 验证复选框
+        checkbox = page.get_by_label("Verify you are human")
 
-        # 点击该复选框元素,最多重试 5 次,每次重试间隔 2 秒
-        for _ in range(5):
+        # 点击该复选框元素,最多重试 10 次,每次重试间隔 5 秒
+        for _ in range(10):
             if checkbox.is_visible() and checkbox.is_enabled():
                 try:
                     checkbox.click()
@@ -41,8 +41,8 @@ def login_koyeb(email, password):
                 except TimeoutError:
                     print("点击复选框超时,重试中...")
             else:
-                print("复选框元素未就绪,等待 2 秒后重试...")
-            time.sleep(2)
+                print("复选框元素未就绪,等待 5 秒后重试...")
+            time.sleep(5)
         else:
             return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
 
@@ -52,14 +52,14 @@ def login_koyeb(email, password):
         # 等待可能出现的错误消息或成功登录后的页面
         try:
             # 等待可能的错误消息
-            error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
+            error_message = page.wait_for_selector('.MuiAlert-message', timeout=10000)
             if error_message:
                 error_text = error_message.inner_text()
                 return f"账号 {email} 登录失败: {error_text}"
         except:
             # 如果没有找到错误消息,检查是否已经跳转到仪表板页面
             try:
-                page.wait_for_url("https://betadash.lunes.host", timeout=5000)
+                page.wait_for_url("https://betadash.lunes.host", timeout=10000)
                 return f"账号 {email} 登录成功!"
             except:
                 return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
@@ -81,4 +81,4 @@ if __name__ == "__main__":
         result = send_telegram_message(message)
         print("消息已发送到Telegram:", result)
     else:
-        error_message
+        print("没有登录状态信息")
