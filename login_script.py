@@ -5,68 +5,51 @@ import requests
 def send_telegram_message(message):
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+    if not bot_token or not chat_id:
+        print("未设置 Telegram 配置")
+        return {"ok": False, "description": "Missing token or chat_id"}
+    
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": message,
         "parse_mode": "Markdown"
     }
-    response = requests.post(url, json=payload)
-    return response.json()
+    try:
+        response = requests.post(url, json=payload)
+        return response.json()
+    except Exception as e:
+        return {"ok": False, "description": str(e)}
 
 def login_koyeb(email, password):
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
         page = browser.new_page()
 
-        page.goto("https://betadash.lunes.host/login", timeout=60000)
-
-        # 输入账号密码
-        page.get_by_placeholder("myemail@gmail.com").fill(email)
-        page.get_by_placeholder("Your Password Here").fill(password)
-
         try:
-            # ✅ 先等待外部容器加载
-            page.wait_for_selector("div.g-recaptcha", timeout=10000)
+            page.goto("https://betadash.lunes.host/login", timeout=60000)
 
-            # ✅ 再等待 iframe，尝试多次
-            for i in range(15):
-                frames = page.frames
-                challenge_frame = next((f for f in frames if "challenges.cloudflare.com" in f.url), None)
-                if challenge_frame:
-                    break
-                page.wait_for_timeout(1000)  # 每秒检查一次
+            page.fill("input#email", email)
+            page.fill("input#password", password)
 
-            if not challenge_frame:
-                page.screenshot(path="no_frame.png")
-                return f"账号 {email} 登录失败: 未找到 Cloudflare 验证 iframe"
+            # 直接点击按钮（无需复选框处理）
+            page.click("button[type='submit']")
 
-            # ✅ 点击验证按钮
+            # 检查是否跳转成功
             try:
-                challenge_frame.click("div[role='button']", timeout=10000)
-            except Exception as e:
-                challenge_frame.screenshot(path="click_error.png")
-                return f"账号 {email} 登录失败: 验证按钮点击失败 ({e})"
-
+                page.wait_for_url("**/dashboard", timeout=10000)
+                result = f"账号 {email} 登录成功!"
+            except TimeoutError:
+                try:
+                    error = page.locator(".MuiAlert-message").text_content()
+                    result = f"账号 {email} 登录失败: {error}"
+                except:
+                    result = f"账号 {email} 登录失败: 未知错误"
         except Exception as e:
-            page.screenshot(path="frame_fail.png")
-            return f"账号 {email} 登录失败: 验证点击失败 ({e})"
-
-        # 点击登录按钮
-        page.get_by_role("button", name="Submit").click()
-
-        try:
-            error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
-            return f"账号 {email} 登录失败: {error_message.inner_text()}"
-        except:
-            try:
-                page.wait_for_url("https://betadash.lunes.host", timeout=5000)
-                return f"账号 {email} 登录成功!"
-            except:
-                return f"账号 {email} 登录失败: 未跳转仪表盘"
-
+            result = f"账号 {email} 登录异常: {e}"
         finally:
             browser.close()
+        return result
 
 if __name__ == "__main__":
     accounts = os.environ.get('WEBHOST', '').split()
@@ -75,16 +58,15 @@ if __name__ == "__main__":
     for account in accounts:
         if ':' not in account:
             continue
-        email, password = account.split(':')
-        status = login_koyeb(email, password)
+        email, password = account.split(':', 1)
+        status = login_koyeb(email.strip(), password.strip())
         login_statuses.append(status)
         print(status)
 
     if login_statuses:
-        message = "WEBHOST登录状态:\n\n" + "\n".join(login_statuses)
-        result = send_telegram_message(message)
-        print("消息已发送到Telegram:", result)
+        message = "🔐 WEBHOST 登录状态:\n\n" + "\n".join(login_statuses)
     else:
-        error_message = "没有配置任何账号"
-        send_telegram_message(error_message)
-        print(error_message)
+        message = "❌ 未配置任何账号"
+
+    result = send_telegram_message(message)
+    print("消息发送结果:", result)
