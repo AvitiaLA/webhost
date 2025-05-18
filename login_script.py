@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright, TimeoutError  # 修改: 添加 TimeoutError 导入
+from playwright.sync_api import sync_playwright, TimeoutError
 import os
 import requests
 
@@ -17,48 +17,47 @@ def send_telegram_message(message):
 def login_koyeb(email, password):
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
-        page = browser.new_page()
+        context = browser.new_context()
+        page = context.new_page()
 
-        # 访问登录页面
-        page.goto("https://betadash.lunes.host/login", timeout=60000)  # 修改: 增加超时时间为60秒
-
-        # 输入邮箱和密码
-        page.get_by_placeholder("myemail@gmail.com").click()
-        page.get_by_placeholder("myemail@gmail.com").fill(email)
-        page.get_by_placeholder("Your Password Here").click()
-        page.get_by_placeholder("Your Password Here").fill(password)
-
-        # 定位 Cloudflare 验证方框的复选框元素
-        checkbox = page.get_by_role("checkbox", name="Verify you are human")
-
-        # 点击该复选框元素,最多重试3次
-        for _ in range(3):
-            try:
-                checkbox.click()
-                break  # 如果点击成功,退出循环
-            except TimeoutError:  # 修改: 使用 TimeoutError 异常
-                print("点击复选框超时,重试中...")
-                continue
-        else:
-            return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
-
-        # 点击登录按钮
-        page.get_by_role("button", name="Submit").click()
-
-        # 等待可能出现的错误消息或成功登录后的页面
         try:
-            # 等待可能的错误消息
-            error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
-            if error_message:
-                error_text = error_message.inner_text()
-                return f"账号 {email} 登录失败: {error_text}"
-        except:
-            # 如果没有找到错误消息,检查是否已经跳转到仪表板页面
+            # 访问登录页面
+            page.goto("https://betadash.lunes.host/login", timeout=60000)
+
+            # 输入邮箱和密码
+            page.get_by_placeholder("myemail@gmail.com").fill(email)
+            page.get_by_placeholder("Your Password Here").fill(password)
+
+            # Cloudflare 验证复选框在 iframe 中
+            page.wait_for_selector("iframe[title*='verification']", timeout=15000)
+            frame = page.frame_locator("iframe[title*='verification']").frame()
+
+            # 尝试点击复选框，最多3次
+            for _ in range(3):
+                try:
+                    frame.locator("input[type='checkbox']").click()
+                    break
+                except Exception as e:
+                    print(f"点击复选框失败，重试中: {e}")
+            else:
+                return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
+
+            # 点击登录按钮
+            page.get_by_role("button", name="Submit").click()
+
+            # 检查是否有错误消息
             try:
-                page.wait_for_url("https://betadash.lunes.host", timeout=5000)
-                return f"账号 {email} 登录成功!"
+                error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
+                if error_message:
+                    error_text = error_message.inner_text()
+                    return f"账号 {email} 登录失败: {error_text}"
             except:
-                return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
+                # 如果没有错误消息，检查是否跳转成功
+                try:
+                    page.wait_for_url("https://betadash.lunes.host", timeout=15000)
+                    return f"账号 {email} 登录成功!"
+                except:
+                    return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
         finally:
             browser.close()
 
