@@ -16,36 +16,48 @@ def send_telegram_message(message):
 
 def login_koyeb(email, password):
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
+        browser = p.firefox.launch(headless=False)  # 调试建议设为 False
         page = browser.new_page()
 
         page.goto("https://betadash.lunes.host/login", timeout=60000)
 
-        # 输入邮箱和密码
+        # 输入账号密码
         page.get_by_placeholder("myemail@gmail.com").fill(email)
         page.get_by_placeholder("Your Password Here").fill(password)
 
         try:
-            # ✅ 等待 Cloudflare iframe 出现
-            frame_element = page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=15000)
-            frame = frame_element.content_frame()
+            # ✅ 先等待外部容器加载
+            page.wait_for_selector("div.g-recaptcha", timeout=10000)
 
-            if frame is None:
-                return f"账号 {email} 登录失败: 无法切入 Cloudflare iframe"
+            # ✅ 再等待 iframe，尝试多次
+            for i in range(15):
+                frames = page.frames
+                challenge_frame = next((f for f in frames if "challenges.cloudflare.com" in f.url), None)
+                if challenge_frame:
+                    break
+                page.wait_for_timeout(1000)  # 每秒检查一次
 
-            # ✅ 点击 iframe 中的验证按钮（用 div 或 span）
-            frame.click("div[role='button']", timeout=10000)
+            if not challenge_frame:
+                page.screenshot(path="no_frame.png")
+                return f"账号 {email} 登录失败: 未找到 Cloudflare 验证 iframe"
+
+            # ✅ 点击验证按钮
+            try:
+                challenge_frame.click("div[role='button']", timeout=10000)
+            except Exception as e:
+                challenge_frame.screenshot(path="click_error.png")
+                return f"账号 {email} 登录失败: 验证按钮点击失败 ({e})"
 
         except Exception as e:
+            page.screenshot(path="frame_fail.png")
             return f"账号 {email} 登录失败: 验证点击失败 ({e})"
 
-        # 提交登录
+        # 点击登录按钮
         page.get_by_role("button", name="Submit").click()
 
         try:
             error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
-            if error_message:
-                return f"账号 {email} 登录失败: {error_message.inner_text()}"
+            return f"账号 {email} 登录失败: {error_message.inner_text()}"
         except:
             try:
                 page.wait_for_url("https://betadash.lunes.host", timeout=5000)
@@ -61,6 +73,8 @@ if __name__ == "__main__":
     login_statuses = []
 
     for account in accounts:
+        if ':' not in account:
+            continue
         email, password = account.split(':')
         status = login_koyeb(email, password)
         login_statuses.append(status)
