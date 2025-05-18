@@ -16,7 +16,7 @@ def send_telegram_message(message):
 
 def login_koyeb(email, password):
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=False)  # 调试建议设为 False
+        browser = p.firefox.launch(headless=True)
         page = browser.new_page()
 
         page.goto("https://betadash.lunes.host/login", timeout=60000)
