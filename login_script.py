@@ -28,19 +28,15 @@ def login_koyeb(email, password):
             page.get_by_placeholder("myemail@gmail.com").fill(email)
             page.get_by_placeholder("Your Password Here").fill(password)
 
-            # Cloudflare 验证复选框在 iframe 中
-            page.wait_for_selector("iframe[title*='verification']", timeout=15000)
-            frame = page.frame_locator("iframe[title*='verification']").frame()
-
-            # 尝试点击复选框，最多3次
-            for _ in range(3):
-                try:
-                    frame.locator("input[type='checkbox']").click()
-                    break
-                except Exception as e:
-                    print(f"点击复选框失败，重试中: {e}")
+        try:
+            # 等待复选框出现
+            page.wait_for_selector("input[type='checkbox']", timeout=15000)
+            # 点击复选框
+            page.locator("input[type='checkbox']").click()
+            except Exception as e:
+            return f"账号 {email} 登录失败: 验证复选框点击失败 ({str(e)})"
             else:
-                return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
+            return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
 
             # 点击登录按钮
             page.get_by_role("button", name="Submit").click()
@@ -53,7 +49,7 @@ def login_koyeb(email, password):
                     return f"账号 {email} 登录失败: {error_text}"
             except:
                 # 如果没有错误消息，检查是否跳转成功
-                try:
+            try:
                     page.wait_for_url("https://betadash.lunes.host", timeout=15000)
                     return f"账号 {email} 登录成功!"
                 except:
