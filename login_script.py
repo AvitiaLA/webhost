@@ -29,7 +29,7 @@ def login_koyeb(email, password):
         page.get_by_placeholder("Your Password Here").fill(password)
 
         # 定位 Cloudflare 验证方框的复选框元素
-        checkbox = page.get_by_label("Verify you are human")
+        page.get_by_role("checkbox", label="Verify you are human")
 
         # 点击该复选框元素
         checkbox.click()
