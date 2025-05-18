@@ -8,6 +8,7 @@ def send_telegram_message(message):
     if not bot_token or not chat_id:
         print("未设置 Telegram 配置")
         return {"ok": False, "description": "Missing token or chat_id"}
+
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -19,51 +20,41 @@ def send_telegram_message(message):
 
 def login_koyeb(email, password):
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)  # headless 适配无头环境
+        browser = p.firefox.launch(headless=True)
         page = browser.new_page()
 
         try:
             page.goto("https://betadash.lunes.host/login", timeout=60000)
 
-            # 填写邮箱密码
-            page.fill("input#email", email)
-            page.fill("input#password", password)
+            # 填写邮箱和密码
+            page.fill('input[placeholder="myemail@gmail.com"]', email)
+            page.fill('input[placeholder="Your Password Here"]', password)
 
-            # 等待 Cloudflare Turnstile 验证iframe出现，最多等待15秒
+            # 尝试点击Cloudflare验证复选框（如果存在）
             try:
-                frame = page.frame_locator("iframe[src*='challenges.cloudflare.com']").frame()
+                checkbox = page.locator("input[type='checkbox']")
+                if checkbox.is_visible():
+                    checkbox.click()
             except Exception:
-                frame = None
-
-            if frame:
-                try:
-                    checkbox = frame.locator("input[type='checkbox']")
-                    checkbox.click(timeout=10000)
-                    print("验证复选框点击成功")
-                except Exception as e:
-                    print(f"登录失败: 验证点击失败 {str(e)}")
-                    return f"账号 {email} 登录失败: 验证点击失败"
-            else:
-                print("未检测到验证iframe，可能不需要验证")
+                # 如果不存在或点击失败，忽略
+                pass
 
             # 点击登录按钮
-            page.click("button[type='submit']")
+            page.click('button:has-text("Submit")')
 
-            # 等待错误消息或跳转
+            # 等待错误消息或判断跳转
             try:
                 error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
                 if error_message:
                     error_text = error_message.inner_text()
                     return f"账号 {email} 登录失败: {error_text}"
             except TimeoutError:
-                # 没有错误，检查是否跳转到主页
-                try:
-                    page.wait_for_url("https://betadash.lunes.host", timeout=5000)
+                # 没有错误消息，改成判断URL是否仍在登录页
+                current_url = page.url
+                if "/login" not in current_url:
                     return f"账号 {email} 登录成功!"
-                except TimeoutError:
+                else:
                     return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
-        except Exception as e:
-            return f"账号 {email} 登录失败: 未知错误 {str(e)}"
         finally:
             browser.close()
 
@@ -74,9 +65,10 @@ if __name__ == "__main__":
     for account in accounts:
         try:
             email, password = account.split(':')
-        except Exception:
-            print(f"账号格式错误: {account}")
+        except ValueError:
+            print(f"账号格式错误，跳过：{account}")
             continue
+
         status = login_koyeb(email, password)
         login_statuses.append(status)
         print(status)
