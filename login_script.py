@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError
 import os
 import requests
 
@@ -36,7 +36,7 @@ def login_koyeb(email, password):
             try:
                 checkbox.click()
                 break  # 如果点击成功,退出循环
-            except playwright._impl._errors.TimeoutError:
+            except TimeoutError:
                 print("点击复选框超时,重试中...")
                 continue
         else:
