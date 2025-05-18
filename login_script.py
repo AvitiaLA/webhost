@@ -19,19 +19,18 @@ def login():
 
         try:
             page.goto(LOGIN_URL, timeout=60000)
+            print("页面加载完成")
 
-            # 等待Cloudflare验证iframe加载并定位复选框
-            frame_locator = page.frame_locator("iframe[src*='challenges.cloudflare.com']")
-            try:
-                # 等待复选框出现
-                checkbox = frame_locator.get_by_role("checkbox")
-                checkbox.wait_for(state="visible", timeout=15000)
-                checkbox.click()
-                print("Cloudflare 验证复选框已点击")
-                time.sleep(5)  # 等待验证过程结束
-            except TimeoutError:
-                print("❌ 验证复选框等待或点击超时，登录失败")
-                return
+            # 等待iframe出现
+            print("等待 Cloudflare 验证 iframe 出现...")
+            iframe_locator = page.frame_locator("iframe[src*='challenges.cloudflare.com']")
+            iframe_locator.locator("role=checkbox").wait_for(timeout=20000)
+            print("验证复选框出现，准备点击...")
+
+            # 点击复选框
+            iframe_locator.locator("role=checkbox").click()
+            print("复选框已点击，等待验证完成...")
+            time.sleep(7)  # 等待Cloudflare完成验证
 
             # 填写登录信息
             page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
@@ -41,15 +40,14 @@ def login():
             with page.expect_navigation(timeout=15000):
                 page.get_by_role("button", name="Submit").click()
 
-            # 判断是否跳转成功
             current_url = page.url
             if current_url.strip("/") == SUCCESS_URL.strip("/"):
                 print("✅ 登录成功")
             else:
                 print(f"❌ 登录失败: 未跳转到仪表板页面 ({current_url})")
 
-        except TimeoutError:
-            print("❌ 登录流程超时，登录失败")
+        except TimeoutError as e:
+            print(f"❌ 超时错误: {e}")
         except Exception as e:
             print(f"登录过程中出现错误: {e}")
         finally:
