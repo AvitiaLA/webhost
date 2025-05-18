@@ -17,45 +17,43 @@ def send_telegram_message(message):
 def login_koyeb(email, password):
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
+        page = browser.new_page()
 
+        # 访问登录页面
+        page.goto("https://betadash.lunes.host/login", timeout=60000)
+
+        # 输入邮箱和密码
+        page.get_by_placeholder("myemail@gmail.com").click()
+        page.get_by_placeholder("myemail@gmail.com").fill(email)
+        page.get_by_placeholder("Your Password Here").click()
+        page.get_by_placeholder("Your Password Here").fill(password)
+
+        # 替换成等待并点击复选框
         try:
-            # 访问登录页面
-            page.goto("https://betadash.lunes.host/login", timeout=60000)
-
-            # 输入邮箱和密码
-            page.get_by_placeholder("myemail@gmail.com").fill(email)
-            page.get_by_placeholder("Your Password Here").fill(password)
-
-        try:
-            # 等待复选框出现
             page.wait_for_selector("input[type='checkbox']", timeout=15000)
-            # 点击复选框
             page.locator("input[type='checkbox']").click()
-            except Exception as e:
-            return f"账号 {email} 登录失败: 验证复选框点击失败 ({str(e)})"
-            else:
-            return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
-
-            # 点击登录按钮
-            page.get_by_role("button", name="Submit").click()
-
-            # 检查是否有错误消息
-            try:
-                error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
-                if error_message:
-                    error_text = error_message.inner_text()
-                    return f"账号 {email} 登录失败: {error_text}"
-            except:
-                # 如果没有错误消息，检查是否跳转成功
-            try:
-                    page.wait_for_url("https://betadash.lunes.host", timeout=15000)
-                    return f"账号 {email} 登录成功!"
-                except:
-                    return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
-        finally:
+        except Exception as e:
             browser.close()
+            return f"账号 {email} 登录失败: 验证复选框点击失败 ({str(e)})"
+
+        # 点击登录按钮
+        page.get_by_role("button", name="Submit").click()
+
+        # 等待错误消息或跳转
+        try:
+            error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
+            if error_message:
+                error_text = error_message.inner_text()
+                browser.close()
+                return f"账号 {email} 登录失败: {error_text}"
+        except:
+            try:
+                page.wait_for_url("https://betadash.lunes.host", timeout=5000)
+                browser.close()
+                return f"账号 {email} 登录成功!"
+            except:
+                browser.close()
+                return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
 
 if __name__ == "__main__":
     accounts = os.environ.get('WEBHOST', '').split()
