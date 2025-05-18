@@ -1,4 +1,7 @@
-from playwright.sync_api import sync_playwright, TimeoutError
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import os
 import requests
 import time
@@ -16,55 +19,50 @@ def send_telegram_message(message):
     return response.json()
 
 def login_koyeb(email, password):
-    with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
-        page = browser.new_page()
+    options = webdriver.FirefoxOptions()
+    options.headless = True
+    driver = webdriver.Firefox(options=options)
 
-        # 访问登录页面
-        page.goto("https://betadash.lunes.host/login", timeout=60000)
+    try:
+        driver.get("https://betadash.lunes.host/login")
 
         # 输入邮箱和密码
-        page.get_by_placeholder("myemail@gmail.com").click()
-        page.get_by_placeholder("myemail@gmail.com").fill(email)
-        page.get_by_placeholder("Your Password Here").click()
-        page.get_by_placeholder("Your Password Here").fill(password)
+        email_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='myemail@gmail.com']")
+        email_field.send_keys(email)
+        password_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='Your Password Here']")
+        password_field.send_keys(password)
 
         # 定位 Cloudflare 验证复选框
-        checkbox = page.get_by_label("Verify you are human")
+        checkbox = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='Verify you are human']"))
+        )
 
-        # 点击该复选框元素,最多重试 10 次,每次重试间隔 5 秒
-        for _ in range(10):
-            if checkbox.is_visible() and checkbox.is_enabled():
-                try:
-                    checkbox.click()
-                    break  # 如果点击成功,退出循环
-                except TimeoutError:
-                    print("点击复选框超时,重试中...")
-            else:
-                print("复选框元素未就绪,等待 5 秒后重试...")
-            time.sleep(5)
-        else:
-            return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
+        # 点击复选框
+        checkbox.click()
 
         # 点击登录按钮
-        page.get_by_role("button", name="Submit").click()
+        login_button = driver.find_element(By.CSS_SELECTOR, "button[name='Submit']")
+        login_button.click()
 
         # 等待可能出现的错误消息或成功登录后的页面
         try:
             # 等待可能的错误消息
-            error_message = page.wait_for_selector('.MuiAlert-message', timeout=10000)
-            if error_message:
-                error_text = error_message.inner_text()
-                return f"账号 {email} 登录失败: {error_text}"
+            error_message = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".MuiAlert-message"))
+            )
+            error_text = error_message.text
+            return f"账号 {email} 登录失败: {error_text}"
         except:
             # 如果没有找到错误消息,检查是否已经跳转到仪表板页面
             try:
-                page.wait_for_url("https://betadash.lunes.host", timeout=10000)
+                WebDriverWait(driver, 10).until(
+                    EC.url_contains("https://betadash.lunes.host")
+                )
                 return f"账号 {email} 登录成功!"
             except:
                 return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
-        finally:
-            browser.close()
+    finally:
+        driver.quit()
 
 if __name__ == "__main__":
     accounts = os.environ.get('WEBHOST', '').split()
@@ -79,6 +77,7 @@ if __name__ == "__main__":
     if login_statuses:
         message = "WEBHOST登录状态:\n\n" + "\n".join(login_statuses)
         result = send_telegram_message(message)
+
         print("消息已发送到Telegram:", result)
     else:
         print("没有登录状态信息")
