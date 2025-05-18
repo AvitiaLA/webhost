@@ -1,3 +1,5 @@
 undetected-chromedriver
 selenium
 python-telegram-bot
+aiofiles
+requests
