@@ -1,17 +1,6 @@
-import subprocess
-import sys
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from playwright.sync_api import sync_playwright, TimeoutError  # 修改: 添加 TimeoutError 导入
 import os
 import requests
-import time
-
-try:
-    import selenium
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "selenium"])
 
 def send_telegram_message(message):
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -26,57 +15,54 @@ def send_telegram_message(message):
     return response.json()
 
 def login_koyeb(email, password):
-    options = webdriver.FirefoxOptions()
-    options.headless = True
-    driver = webdriver.Firefox(options=options)
+    with sync_playwright() as p:
+        browser = p.firefox.launch(headless=True)
+        page = browser.new_page()
 
-    try:
-        driver.get("https://betadash.lunes.host/login")
+        # 访问登录页面
+        page.goto("https://betadash.lunes.host/login", timeout=60000)  # 修改: 增加超时时间为60秒
 
         # 输入邮箱和密码
-        email_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='myemail@gmail.com']")
-        email_field.send_keys(email)
-        password_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='Your Password Here']")
-        password_field.send_keys(password)
+        page.get_by_placeholder("myemail@gmail.com").click()
+        page.get_by_placeholder("myemail@gmail.com").fill(email)
+        page.get_by_placeholder("Your Password Here").click()
+        page.get_by_placeholder("Your Password Here").fill(password)
 
-        # 定位 Cloudflare 验证复选框
-        checkbox = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='Verify you are human']"))
-        )
+        # 定位 Cloudflare 验证方框的复选框元素
+        checkbox = page.get_by_role("checkbox", name="Verify you are human")
 
-        # 点击复选框
-        checkbox.click()
+        # 点击该复选框元素,最多重试3次
+        for _ in range(3):
+            try:
+                checkbox.click()
+                break  # 如果点击成功,退出循环
+            except TimeoutError:  # 修改: 使用 TimeoutError 异常
+                print("点击复选框超时,重试中...")
+                continue
+        else:
+            return f"账号 {email} 登录失败: 无法点击 Cloudflare 验证复选框"
 
         # 点击登录按钮
-        login_button = driver.find_element(By.CSS_SELECTOR, "button[name='Submit']")
-        login_button.click()
+        page.get_by_role("button", name="Submit").click()
 
         # 等待可能出现的错误消息或成功登录后的页面
         try:
             # 等待可能的错误消息
-            error_message = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".MuiAlert-message"))
-            )
-            error_text = error_message.text
-            return f"账号 {email} 登录失败: {error_text}"
+            error_message = page.wait_for_selector('.MuiAlert-message', timeout=5000)
+            if error_message:
+                error_text = error_message.inner_text()
+                return f"账号 {email} 登录失败: {error_text}"
         except:
             # 如果没有找到错误消息,检查是否已经跳转到仪表板页面
             try:
-                WebDriverWait(driver, 10).until(
-                    EC.url_contains("https://betadash.lunes.host")
-                )
+                page.wait_for_url("https://betadash.lunes.host", timeout=5000)
                 return f"账号 {email} 登录成功!"
             except:
                 return f"账号 {email} 登录失败: 未能跳转到仪表板页面"
-    finally:
-        driver.quit()
+        finally:
+            browser.close()
 
 if __name__ == "__main__":
-    try:
-        import selenium
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "selenium"])
-
     accounts = os.environ.get('WEBHOST', '').split()
     login_statuses = []
 
@@ -91,4 +77,6 @@ if __name__ == "__main__":
         result = send_telegram_message(message)
         print("消息已发送到Telegram:", result)
     else:
-        print("没有登录状态信息")
+        error_message = "没有配置任何账号"
+        send_telegram_message(error_message)
+        print(error_message)
