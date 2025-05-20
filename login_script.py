@@ -22,8 +22,8 @@ async def main():
 
             print("填写邮箱和密码...")
 
-            await page.get_by_placeholder("myemail@gmail.com").fill(EMAIL)
-            await page.get_by_placeholder("Your Password Here").fill(PASSWORD)
+            await page.locator("#email").fill(EMAIL)
+            await page.locator("#password").fill(PASSWORD)
 
             print("等待 Cloudflare Turnstile 验证器...")
             await page.get_by_text("Verify you are human").wait_for(timeout=15000)
