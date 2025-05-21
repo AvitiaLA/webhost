@@ -8,7 +8,6 @@ EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 
 START_URL = "https://betadash.lunes.host/login"
-LOGIN_URL = "https://betadash.lunes.host/login?next=/"
 SUCCESS_URL = "https://betadash.lunes.host"
 
 screenshot_dir = "screenshots"
@@ -23,6 +22,25 @@ def save_screenshot(page, prefix):
     except Exception as e:
         print("[截图失败]", e)
 
+def wait_for_cloudflare(page):
+    print("等待 Cloudflare 验证完成...")
+    try:
+        # 等待 “Verify you are human” 消失 或 “Success!” 出现
+        for i in range(30):  # 最多等30秒
+            content = page.content()
+            if "Success!" in content:
+                print("✅ Cloudflare 验证成功！")
+                return True
+            if "Verify you are human" not in content:
+                print("✅ Cloudflare 验证已跳过或已完成！")
+                return True
+            time.sleep(1)
+        print("[超时] Cloudflare 验证未完成")
+        return False
+    except Exception as e:
+        print("[异常] 验证检测失败：", e)
+        return False
+
 def main():
     print("启动浏览器...")
     with sync_playwright() as p:
@@ -34,37 +52,17 @@ def main():
             print("访问登录页面...")
             page.goto(START_URL, timeout=60000)
 
-            print("等待 Cloudflare Turnstile 验证器...")
-            try:
-                page.wait_for_timeout(3000)  # 给 iframe 留点加载时间
-                frame_locator = page.frame_locator("iframe[title*='security challenge']")
-                checkbox = frame_locator.locator("input[type='checkbox']")
+            if not wait_for_cloudflare(page):
+                raise Exception("Cloudflare 验证未通过")
 
-                checkbox.wait_for(state="visible", timeout=15000)
-                checkbox.click(force=True)
-                print("点击验证码复选框成功，等待验证完成...")
-                page.wait_for_timeout(5000)  # 等待验证过程（可调）
-
-            except PlaywrightTimeout:
-                print("[警告] 验证复选框未出现，可能已跳过验证")
-            except Exception as e:
-                print(f"[警告] 验证处理失败: {e}")
-                save_screenshot(page, "turnstile_error")
-
-            print("填写邮箱和密码...")
-            try:
-                page.locator("#email").wait_for(state="visible", timeout=20000)
-                page.fill("#email", EMAIL)
-                page.fill("#password", PASSWORD)
-                page.click("button[type='submit']")
-            except Exception as e:
-                raise Exception(f"表单填写失败: {e}")
+            print("等待登录表单加载...")
+            page.wait_for_selector("#email", timeout=20000)
+            page.fill("#email", EMAIL)
+            page.fill("#password", PASSWORD)
+            page.click("button[type='submit']")
 
             print("等待跳转以确认登录成功...")
-            try:
-                page.wait_for_url(SUCCESS_URL, timeout=20000)
-            except PlaywrightTimeout:
-                print(f"[警告] 未跳转到 {SUCCESS_URL}，当前页面: {page.url}")
+            page.wait_for_url(SUCCESS_URL, timeout=20000)
 
             if page.url.startswith(SUCCESS_URL):
                 print("✅ 登录成功！")
