@@ -1,63 +1,73 @@
 import os
 import time
-from playwright.sync_api import sync_playwright
 from datetime import datetime
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-# 获取环境变量
+# 环境变量
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 
-# 登录地址
-LOGIN_URL = "https://betadash.lunes.host"
+START_URL = "https://betadash.lunes.host"
+LOGIN_URL = "https://betadash.lunes.host/login?next=/"
+SUCCESS_URL = "https://betadash.lunes.host"
 
-# 截图函数
-def take_screenshot(page, label):
+screenshot_dir = "screenshots"
+os.makedirs(screenshot_dir, exist_ok=True)
+
+def save_screenshot(page, prefix):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"error_{label}_{timestamp}.png"
+    path = os.path.join(screenshot_dir, f"{prefix}_{timestamp}.png")
     try:
-        page.screenshot(path=filename)
-        print(f"截图保存到 {filename} 以便排查...")
+        page.screenshot(path=path)
+        print(f"[截图已保存] {path}")
     except Exception as e:
-        print("截图失败", e)
+        print("[截图失败]", e)
 
-# 启动 Playwright 并执行脚本
-with sync_playwright() as p:
-    try:
-        print("启动浏览器...")
+def main():
+    print("启动浏览器...")
+    with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
         page = context.new_page()
 
-        print("访问登录页面...")
-        page.goto(LOGIN_URL, timeout=60000)
-
-        # === 处理 Cloudflare Turnstile 验证器 ===
         try:
+            print("访问登录页面...")
+            page.goto(START_URL, timeout=60000)
+            if page.url != LOGIN_URL:
+                print(f"[跳转中] 当前URL: {page.url}，等待登录页面加载...")
+                page.wait_for_url(LOGIN_URL, timeout=15000)
+
             print("等待 Cloudflare Turnstile 验证器...")
-            iframe_element = page.frame_locator("iframe[title*='security challenge']")
-            checkbox = iframe_element.locator("input[type='checkbox']")
-            checkbox.wait_for(timeout=20000)
-            checkbox.click()
-            print("点击了 Cloudflare 验证框，等待验证通过...")
-            page.wait_for_timeout(10000)  # 等待跳转完成
+            try:
+                frame = page.frame_locator("iframe[title*='security challenge']")
+                checkbox = frame.locator("input[type='checkbox']")
+                checkbox.wait_for(state="visible", timeout=20000)
+                checkbox.click()
+                print("点击验证码复选框... 等待验证完成")
+                page.wait_for_url(LOGIN_URL, timeout=30000)
+            except PlaywrightTimeout:
+                print("[警告] 未检测到验证码或已跳过验证")
+
+            print("填写邮箱和密码...")
+            page.locator("#email").wait_for(state="visible", timeout=30000)
+            page.fill("#email", EMAIL)
+            page.fill("#password", PASSWORD)
+            page.click("button[type='submit']")
+
+            print("等待跳转以确认登录成功...")
+            page.wait_for_url(SUCCESS_URL, timeout=15000)
+
+            if page.url.startswith(SUCCESS_URL):
+                print("✅ 登录成功！")
+            else:
+                raise Exception(f"登录失败，当前URL: {page.url}")
+
         except Exception as e:
-            print(f"[警告] 未检测到验证码或处理失败：{e}")
+            print("[错误] 登录过程出错：", e)
+            save_screenshot(page, "error_login")
 
-        print("填写邮箱和密码...")
-        page.wait_for_selector("#email", timeout=30000)
-        page.fill("#email", EMAIL)
-        page.fill("#password", PASSWORD)
+        finally:
+            browser.close()
 
-        print("点击登录按钮...")
-        page.click("button[type='submit']")
-
-        print("等待跳转...")
-        page.wait_for_url("https://betadash.lunes.host", timeout=20000)
-
-        print("✅ 登录成功！")
-
-    except Exception as e:
-        print(f"[错误] 登录过程出错：{e}")
-        take_screenshot(page, "login_error")
-    finally:
-        browser.close()
+if __name__ == "__main__":
+    main()
