@@ -38,4 +38,4 @@ jobs:
         with:
           name: error-screenshots
           path: |
-            *.png
+            **/*.png
