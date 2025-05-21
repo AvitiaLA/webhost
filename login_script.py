@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 
-START_URL = "https://betadash.lunes.host"
+START_URL = "https://betadash.lunes.host/login"
 LOGIN_URL = "https://betadash.lunes.host/login?next=/"
 SUCCESS_URL = "https://betadash.lunes.host"
 
@@ -33,9 +33,6 @@ def main():
         try:
             print("访问登录页面...")
             page.goto(START_URL, timeout=60000)
-            if page.url != LOGIN_URL:
-                print(f"[跳转中] 当前URL: {page.url}，等待登录页面加载...")
-                page.wait_for_url(LOGIN_URL, timeout=15000)
 
             print("等待 Cloudflare Turnstile 验证器...")
             try:
