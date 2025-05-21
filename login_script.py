@@ -24,10 +24,10 @@ def save_screenshot(page, prefix):
 def wait_for_turnstile(page):
     print("等待 Cloudflare Turnstile 验证器 iframe 出现...")
 
-    try:
-        for _ in range(30):
+    for attempt in range(30):
+        try:
             frames = page.frames
-            print(f"[调试] 当前页面共有 {len(frames)} 个 frame:")
+            print(f"[调试] 尝试第 {attempt+1} 次，当前页面共有 {len(frames)} 个 frame:")
             for i, frame in enumerate(frames):
                 print(f"  frame[{i}] URL: {frame.url}, Title: {frame.title()}")
 
@@ -48,8 +48,9 @@ def wait_for_turnstile(page):
                             print(f"[调试] 点击复选框失败: {e}")
             print("等待验证码 iframe 加载中...")
             time.sleep(1)
-    except Exception as e:
-        print("[错误] 验证处理失败：", e)
+        except Exception as e:
+            print(f"[调试] 访问 frame 时报错（可能被卸载），重试中: {e}")
+            time.sleep(1)
     return False
 
 def wait_for_success_text(page):
