@@ -61,7 +61,7 @@ def wait_for_success_text(page):
 def main():
     print("启动浏览器...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # 运行时看得见浏览器方便调试
+        browser = p.chromium.launch(headless=True)  # 运行时看得见浏览器方便调试
         context = browser.new_context()
         page = context.new_page()
 
