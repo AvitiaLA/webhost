@@ -23,20 +23,29 @@ def save_screenshot(page, prefix):
 
 def wait_for_turnstile(page):
     print("等待 Cloudflare Turnstile 验证器 iframe 出现...")
+
     try:
-        # 最长等待 30 秒加载 iframe
         for _ in range(30):
             frames = page.frames
+            print(f"[调试] 当前页面共有 {len(frames)} 个 frame:")
+            for i, frame in enumerate(frames):
+                print(f"  frame[{i}] URL: {frame.url}, Title: {frame.title()}")
+
             for frame in frames:
                 if "Challenge" in frame.title() or "challenge" in frame.url:
                     checkbox = frame.locator("input[type='checkbox']")
-                    try:
-                        checkbox.wait_for(state="visible", timeout=2000)
-                        checkbox.click()
-                        print("✅ 成功点击验证码复选框")
-                        return True
-                    except:
-                        pass
+                    count = checkbox.count()
+                    print(f"[调试] 找到验证码 iframe，复选框数量: {count}")
+                    if count > 0:
+                        try:
+                            checkbox.wait_for(state="visible", timeout=2000)
+                            checkbox.hover()
+                            time.sleep(0.5)
+                            checkbox.click()
+                            print("✅ 成功点击验证码复选框")
+                            return True
+                        except Exception as e:
+                            print(f"[调试] 点击复选框失败: {e}")
             print("等待验证码 iframe 加载中...")
             time.sleep(1)
     except Exception as e:
