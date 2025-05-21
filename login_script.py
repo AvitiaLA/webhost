@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
+# 环境变量读账号密码，确保你运行前先 export LOGIN_EMAIL 和 LOGIN_PASSWORD
 EMAIL = os.getenv("LOGIN_EMAIL")
 PASSWORD = os.getenv("LOGIN_PASSWORD")
 
@@ -14,7 +15,7 @@ os.makedirs(screenshot_dir, exist_ok=True)
 
 def save_screenshot(page, prefix):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = os.path.join(screenshot_dir, f"{prefix}_{timestamp}.png")
+    path = f"{screenshot_dir}/{prefix}_{timestamp}.png"
     try:
         page.screenshot(path=path)
         print(f"[截图已保存] {path}")
@@ -23,34 +24,28 @@ def save_screenshot(page, prefix):
 
 def wait_for_turnstile(page):
     print("等待 Cloudflare Turnstile 验证器 iframe 出现...")
-
     for attempt in range(30):
-        try:
-            frames = page.frames
-            print(f"[调试] 尝试第 {attempt+1} 次，当前页面共有 {len(frames)} 个 frame:")
-            for i, frame in enumerate(frames):
-                print(f"  frame[{i}] URL: {frame.url}, Title: {frame.title()}")
+        frames = page.frames
+        print(f"[调试] 尝试第 {attempt+1} 次，当前页面共有 {len(frames)} 个 frame:")
+        for i, frame in enumerate(frames):
+            print(f"  frame[{i}] URL: {frame.url}, Title: {frame.title()}")
 
-            for frame in frames:
-                if "Challenge" in frame.title() or "challenge" in frame.url:
-                    checkbox = frame.locator("input[type='checkbox']")
-                    count = checkbox.count()
-                    print(f"[调试] 找到验证码 iframe，复选框数量: {count}")
-                    if count > 0:
-                        try:
-                            checkbox.wait_for(state="visible", timeout=2000)
-                            checkbox.hover()
-                            time.sleep(0.5)
-                            checkbox.click()
-                            print("✅ 成功点击验证码复选框")
-                            return True
-                        except Exception as e:
-                            print(f"[调试] 点击复选框失败: {e}")
-            print("等待验证码 iframe 加载中...")
-            time.sleep(1)
-        except Exception as e:
-            print(f"[调试] 访问 frame 时报错（可能被卸载），重试中: {e}")
-            time.sleep(1)
+        for frame in frames:
+            if "Challenge" in frame.title() or "challenge" in frame.url:
+                checkbox = frame.locator("input[type='checkbox']")
+                count = checkbox.count()
+                print(f"[调试] 找到验证码 iframe，复选框数量: {count}")
+                if count > 0:
+                    try:
+                        checkbox.wait_for(state="visible", timeout=3000)
+                        # 使用JS点击复选框，避免点击失败
+                        frame.evaluate("(checkbox) => checkbox.click()", checkbox.element_handle())
+                        print("✅ 通过JS点击验证码复选框成功")
+                        return True
+                    except Exception as e:
+                        print(f"[调试] JS点击复选框失败: {e}")
+        print("等待验证码 iframe 加载中...")
+        time.sleep(1)
     return False
 
 def wait_for_success_text(page):
@@ -59,14 +54,14 @@ def wait_for_success_text(page):
         page.wait_for_selector("text=Success!", timeout=15000)
         print("✅ 验证通过！")
         return True
-    except:
+    except PlaywrightTimeout:
         print("[警告] 未检测到 'Success!'，可能验证已跳过或失败")
         return False
 
 def main():
     print("启动浏览器...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)  # 运行时看得见浏览器方便调试
         context = browser.new_context()
         page = context.new_page()
 
@@ -75,8 +70,7 @@ def main():
             page.goto(START_URL, timeout=60000)
 
             print("处理 Cloudflare Turnstile 验证...")
-            verified = wait_for_turnstile(page)
-            if not verified:
+            if not wait_for_turnstile(page):
                 raise Exception("❌ 验证复选框无法点击")
 
             wait_for_success_text(page)
